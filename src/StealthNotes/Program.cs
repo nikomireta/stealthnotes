@@ -25,12 +25,17 @@ internal static class Program
         using var installerGuard=new Mutex(false,@"Local\StealthNotes.InstallerGuard");
         using var mutex=new Mutex(true,@"Local\StealthNotes."+identity,out bool first);
         if(!first){
+            if(!RunningInstance.CanActivate(directory,out string explanation)){
+                MessageBox.Show(explanation,"StealthNotes — another copy is running",MessageBoxButtons.OK,MessageBoxIcon.Information);
+                Environment.ExitCode=2;return;
+            }
             try {using var signal=EventWaitHandle.OpenExisting(@"Local\StealthNotes.Open."+identity);signal.Set();}
             catch(WaitHandleCannotBeOpenedException){MessageBox.Show("StealthNotes is starting. If it is already running, use the tray icon.","StealthNotes");}
             return;
         }
         try {
             Directory.CreateDirectory(directory);
+            RunningInstance.Write(directory);
             using var signal=new EventWaitHandle(false,EventResetMode.AutoReset,@"Local\StealthNotes.Open."+identity);
             using var store=new NoteStore(Path.Combine(directory,"notes.sqlite3"));
             using var context=new NotesContext(store,signal);Application.Run(context);
@@ -38,6 +43,6 @@ internal static class Program
             LocalLog.Error("Startup/shutdown error",e);
             MessageBox.Show("StealthNotes could not open or save your notes. Your database has not been deleted.\n\n"+e.Message+"\n\nFolder: "+directory,
                 "StealthNotes",MessageBoxButtons.OK,MessageBoxIcon.Error);
-        }finally{mutex.ReleaseMutex();}
+        }finally{RunningInstance.Remove(directory);mutex.ReleaseMutex();}
     }
 }

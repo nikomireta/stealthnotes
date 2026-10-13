@@ -7,6 +7,8 @@ internal sealed class NotesContext : ApplicationContext
     readonly WindowManager windows;
     readonly Hotkeys hotkeys;
     readonly Tray tray;
+    readonly ImageStore images;
+    readonly NotesListWindow notesList;
     readonly Control dispatcher=new();
     readonly RegisteredWaitHandle? wait;
     SettingsDialog? settings;
@@ -19,23 +21,29 @@ internal sealed class NotesContext : ApplicationContext
         var initial=store.Load();
         var fitted=initial.Notes.Values.Select(n=>{var r=WindowManager.Fit(n.Bounds);return n with {X=r.X,Y=r.Y,W=r.Width,H=r.Height};});
         state=new(initial with {Notes=Snapshot.Freeze(fitted)});
-        persistence=new(store,ui);
+        images=new(store.DatabasePath,ui);
+        persistence=new(store,images,ui);
         hotkeys=new();
-        windows=new(state,new GhostService());
-        tray=new(NewNote,ShowAll,()=>state.Dispatch(new SetAllHidden(true)),()=>ToggleGlobalGhost(),OpenSettings,()=>Quit(false));
+        windows=new(state,new GhostService(),images);
+        notesList=new(state,images,NewNote,OpenNote,OpenSettings);
+        tray=new(NewNote,ShowList,ShowAll,()=>state.Dispatch(new SetAllHidden(true)),()=>ToggleGlobalGhost(),OpenSettings,()=>Quit(false));
         windows.NewRequested+=NewNote;
+        windows.ListRequested+=ShowList;
         windows.GhostFailed+=error=>{LocalLog.Error("Ghost failed",new InvalidOperationException(error));tray.Warning("Could not enable ghost mode. "+error);};
-        state.Changed+=persistence.Schedule;state.Changed+=tray.Render;
-        persistence.StatusChanged+=e=>{if(e is not null)tray.Warning("Could not save your notes. Resolve the disk issue before closing the app. See errors.log.");};
+        state.Changed+=images.SetLiveReferences;state.Changed+=persistence.Schedule;state.Changed+=tray.Render;state.Changed+=notesList.Render;
+        persistence.StatusChanged+=e=>{
+            windows.SetSaveError(e is not null);
+            if(e is not null)tray.Warning("Could not save your notes. Resolve the disk issue before closing the app. See errors.log.");
+        };
         hotkeys.Pressed+=OnHotkey;
         hotkeys.QueryEndSession=()=>persistence.Flush(state.Current);
         hotkeys.EndSession=()=>Quit(true);
         bool configured=hotkeys.Configure(state.Current.Hotkeys,out string keyError);
         windows.Render(state.Current);tray.Render(state.Current);
-        if(state.Current.Notes.Count==0)NewNote();else persistence.Schedule(state.Current);
+        persistence.Schedule(state.Current);notesList.ShowList();
         wait=ThreadPool.RegisterWaitForSingleObject(openEvent,(_,timedOut)=>{
             if(disposed||dispatcher.IsDisposed)return;
-            try { dispatcher.BeginInvoke((Action)(()=>{ShowAll();if(windows.Target() is { } id)windows.Activate(id);})); }
+            try { dispatcher.BeginInvoke((Action)ShowList); }
             catch(InvalidOperationException){ /* Application is shutting down. */ }
         },null,Timeout.Infinite,false);
         if(!configured)dispatcher.BeginInvoke((Action)(()=>{
@@ -52,7 +60,9 @@ internal sealed class NotesContext : ApplicationContext
         var note=new Note(Guid.NewGuid(),"","yellow",bounds.X,bounds.Y,bounds.Width,bounds.Height,false,1,.35,now,now);
         state.Dispatch(new AddNote(note));windows.Activate(note.Id);
     }
-    void ShowAll(){state.Dispatch(new SetAllHidden(false));windows.Render(state.Current);}
+    void ShowList()=>notesList.ShowList();
+    void OpenNote(Guid id){state.Dispatch(new OpenNote(id));windows.Activate(id);}
+    void ShowAll(){state.Dispatch(new OpenAllNotes());windows.Render(state.Current,true);}
     void ToggleGlobalGhost()
     {
         if(!GhostService.Supported){tray.Warning("Capture exclusion requires Windows 10 version 2004 or later.");return;}
@@ -65,7 +75,7 @@ internal sealed class NotesContext : ApplicationContext
             case HotkeyAction.NewNote:NewNote();break;
             case HotkeyAction.ToggleGlobalGhost:ToggleGlobalGhost();break;
             case HotkeyAction.ToggleVisibility:
-                bool anyVisible=!state.Current.AllHidden&&state.Current.Notes.Values.Any(n=>!n.SessionHidden);
+                bool anyVisible=!state.Current.AllHidden&&state.Current.Notes.Values.Any(n=>n.IsOpen&&!n.SessionHidden);
                 state.Dispatch(new SetAllHidden(anyVisible));break;
             case HotkeyAction.ToggleNoteGhost:
                 if(!GhostService.Supported){tray.Warning("Capture exclusion is not supported on this version of Windows.");break;}
@@ -98,8 +108,9 @@ internal sealed class NotesContext : ApplicationContext
     protected override void Dispose(bool disposing)
     {
         if(disposing&&!disposed){
-            disposed=true;wait?.Unregister(null);settings?.Dispose();hotkeys.Dispose();windows.Dispose();tray.Dispose();
-            state.Changed-=persistence.Schedule;state.Changed-=tray.Render;persistence.Dispose();dispatcher.Dispose();
+            disposed=true;wait?.Unregister(null);settings?.Dispose();hotkeys.Dispose();windows.Dispose();notesList.Destroy();tray.Dispose();
+            state.Changed-=images.SetLiveReferences;state.Changed-=notesList.Render;
+            state.Changed-=persistence.Schedule;state.Changed-=tray.Render;persistence.Dispose();images.Dispose();dispatcher.Dispose();
         }
         base.Dispose(disposing);
     }

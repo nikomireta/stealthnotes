@@ -1,6 +1,7 @@
-param([string]$Dotnet='dotnet',[switch]$FrameworkDependent,[string]$Version='1.0.0')
+param([string]$Dotnet='dotnet',[switch]$FrameworkDependent,[string]$Version='')
 $ErrorActionPreference='Stop'
 $taskRoot=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+if([string]::IsNullOrWhiteSpace($Version)){$Version=& (Join-Path $PSScriptRoot 'get-version.ps1')}
 $taskMode=if($FrameworkDependent){'framework-dependent'}else{'portable'}
 $taskFolder=if($FrameworkDependent){'win-x64-fdd'}else{'win-x64'}
 $taskOutput=Join-Path $taskRoot "artifacts\publish\$taskFolder"

@@ -4,11 +4,15 @@ namespace StealthNotes;
 
 internal sealed record Note(Guid Id, string Text, string Theme, int X, int Y, int W, int H,
     bool Ghost, double Opacity, double GhostOpacity, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt,
-    bool SessionHidden = false)
+    bool SessionHidden = false, string? Rtf = null, bool IsOpen = true, IReadOnlyList<NoteImage>? Attachments = null)
 {
+    public IReadOnlyList<NoteImage> Images => Attachments ?? Array.Empty<NoteImage>();
+    public bool HasContent => !string.IsNullOrWhiteSpace(Text) || Images.Count>0;
     public Rectangle Bounds => new(X, Y, W, H);
     public double EffectiveOpacity(bool globalGhost) => globalGhost || Ghost ? GhostOpacity : Opacity;
 }
+
+internal sealed record NoteImage(Guid Id,string Mime,int Width,int Height);
 
 internal enum HotkeyAction { NewNote = 1, ToggleNoteGhost, ToggleGlobalGhost, ToggleVisibility, OpacityUp, OpacityDown }
 
@@ -44,26 +48,30 @@ internal readonly record struct Palette(string Id, string Name, Color Paper, Col
 internal static class Themes
 {
     public static readonly Palette[] All = [
-        new("yellow", "Yellow", Color.FromArgb(255,244,181), Color.FromArgb(250,231,141), Color.FromArgb(48,42,28)),
-        new("pink", "Pink", Color.FromArgb(255,223,230), Color.FromArgb(245,198,210), Color.FromArgb(62,36,43)),
-        new("mint", "Mint", Color.FromArgb(219,244,224), Color.FromArgb(189,226,200), Color.FromArgb(30,54,38)),
-        new("blue", "Blue", Color.FromArgb(219,235,255), Color.FromArgb(189,213,246), Color.FromArgb(31,47,70)),
-        new("violet", "Purple", Color.FromArgb(237,225,255), Color.FromArgb(218,199,244), Color.FromArgb(48,35,67)),
-        new("dark", "Dark", Color.FromArgb(37,38,42), Color.FromArgb(47,48,53), Color.FromArgb(242,242,244))
+        new("yellow", "Yellow", Color.FromArgb(255,248,210), Color.FromArgb(253,241,182), Color.FromArgb(58,51,34)),
+        new("pink", "Pink", Color.FromArgb(255,235,240), Color.FromArgb(251,220,230), Color.FromArgb(64,42,49)),
+        new("mint", "Mint", Color.FromArgb(233,247,236), Color.FromArgb(214,237,220), Color.FromArgb(37,57,43)),
+        new("blue", "Blue", Color.FromArgb(233,242,255), Color.FromArgb(213,229,250), Color.FromArgb(39,53,73)),
+        new("violet", "Purple", Color.FromArgb(244,236,255), Color.FromArgb(230,217,249), Color.FromArgb(56,43,72)),
+        new("dark", "Dark", Color.FromArgb(39,40,45), Color.FromArgb(48,49,55), Color.FromArgb(239,239,243))
     ];
     public static Palette Get(string id) => All.FirstOrDefault(p => p.Id == id, All[0]);
 }
 
 internal interface IAction { }
 internal sealed record AddNote(Note Note) : IAction;
-internal sealed record EditText(Guid Id, string Text) : IAction;
+internal sealed record UpdateDocument(Guid Id, string Text, string Rtf) : IAction;
+internal sealed record OpenNote(Guid Id) : IAction;
+internal sealed record OpenAllNotes : IAction;
+internal sealed record AddImage(Guid NoteId, NoteImage Image) : IAction;
+internal sealed record RemoveImage(Guid NoteId, Guid ImageId) : IAction;
 internal sealed record MoveNote(Guid Id, Rectangle Bounds) : IAction;
 internal sealed record ChangeTheme(Guid Id, string Theme) : IAction;
 internal sealed record ToggleNoteGhost(Guid Id) : IAction;
 internal sealed record ChangeOpacity(Guid Id, double Value) : IAction;
 internal sealed record ToggleGlobalGhost : IAction;
 internal sealed record SetAllHidden(bool Hidden) : IAction;
-internal sealed record HideNote(Guid Id) : IAction;
+internal sealed record CloseNote(Guid Id) : IAction;
 internal sealed record DeleteNote(Guid Id) : IAction;
 internal sealed record ChangeHotkeys(HotkeySettings Settings) : IAction;
 
@@ -80,19 +88,26 @@ internal sealed class AppState
         var notes = before.Notes.ToDictionary();
         bool global = before.GlobalGhost, hidden = before.AllHidden;
         var keys = before.Hotkeys;
-        void Update(Guid id, Func<Note, Note> change)
+        void Update(Guid id, Func<Note, Note> change, bool edited=true)
         {
             if (!notes.TryGetValue(id, out var old)) return;
             var next = change(old);
-            if (next != old) notes[id] = next with { UpdatedAt = DateTimeOffset.UtcNow };
+            if (next != old) notes[id] = edited?next with { UpdatedAt = DateTimeOffset.UtcNow }:next;
         }
         switch (action)
         {
             case AddNote a:
                 if(hidden)foreach(var id in notes.Keys.ToArray())notes[id]=notes[id] with {SessionHidden=true};
                 notes[a.Note.Id] = a.Note; hidden = false; break;
-            case EditText a: Update(a.Id, n => n with { Text = a.Text }); break;
-            case MoveNote a: Update(a.Id, n => n with { X=a.Bounds.X, Y=a.Bounds.Y, W=a.Bounds.Width, H=a.Bounds.Height }); break;
+            case UpdateDocument a: Update(a.Id, n => n with { Text = a.Text,Rtf=a.Rtf }); break;
+            case MoveNote a: Update(a.Id, n => n with { X=a.Bounds.X, Y=a.Bounds.Y, W=a.Bounds.Width, H=a.Bounds.Height },false); break;
+            case OpenNote a:
+                if(hidden)foreach(var id in notes.Keys.ToArray())notes[id]=notes[id] with {SessionHidden=true};
+                Update(a.Id,n=>n with {IsOpen=true,SessionHidden=false},false);hidden=false;break;
+            case OpenAllNotes:
+                foreach(var id in notes.Keys.ToArray())notes[id]=notes[id] with {IsOpen=true,SessionHidden=false};hidden=false;break;
+            case AddImage a: Update(a.NoteId,n=>n with {Attachments=Array.AsReadOnly(n.Images.Append(a.Image).ToArray())});break;
+            case RemoveImage a: Update(a.NoteId,n=>n with {Attachments=Array.AsReadOnly(n.Images.Where(i=>i.Id!=a.ImageId).ToArray())});break;
             case ChangeTheme a: Update(a.Id, n => n with { Theme = Themes.Get(a.Theme).Id }); break;
             case ToggleNoteGhost a: Update(a.Id, n => n with { Ghost = !n.Ghost }); break;
             case ChangeOpacity a:
@@ -104,7 +119,12 @@ internal sealed class AppState
                 hidden = a.Hidden;
                 if (!hidden) foreach (var id in notes.Keys.ToArray()) notes[id] = notes[id] with { SessionHidden = false };
                 break;
-            case HideNote a: if (notes.TryGetValue(a.Id, out var n)) notes[a.Id] = n with { SessionHidden = true }; break;
+            case CloseNote a:
+                if (notes.TryGetValue(a.Id, out var n)) {
+                    if (n.HasContent) notes[a.Id] = n with { IsOpen=false,SessionHidden=false };
+                    else notes.Remove(a.Id);
+                }
+                break;
             case DeleteNote a: notes.Remove(a.Id); break;
             case ChangeHotkeys a: keys = a.Settings.Copy(); break;
         }

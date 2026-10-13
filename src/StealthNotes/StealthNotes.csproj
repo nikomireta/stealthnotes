@@ -9,7 +9,7 @@
     <ApplicationIcon>Assets\StealthNotes.ico</ApplicationIcon>
     <AssemblyName>StealthNotes</AssemblyName>
     <RootNamespace>StealthNotes</RootNamespace>
-    <Version>1.0.0</Version>
+    <Version>1.2.0</Version>
     <Authors>StealthNotes contributors</Authors>
     <Description>Local sticky notes with Windows capture exclusion and click-through mode.</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>

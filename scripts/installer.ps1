@@ -1,6 +1,7 @@
-param([string]$Compiler='',[string]$Version='1.0.0')
+param([string]$Compiler='',[string]$Version='')
 $ErrorActionPreference='Stop'
 $taskRoot=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+if([string]::IsNullOrWhiteSpace($Version)){$Version=& (Join-Path $PSScriptRoot 'get-version.ps1')}
 if($Version -notmatch '^\d+\.\d+\.\d+([-.][A-Za-z0-9.]+)?$'){throw 'Invalid version'}
 if(-not $Compiler){
  $taskCandidates=@((Join-Path $taskRoot '.tools/inno-setup/ISCC.exe'),(Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6/ISCC.exe'))

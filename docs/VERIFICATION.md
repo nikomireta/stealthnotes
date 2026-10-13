@@ -1,27 +1,43 @@
-# Verification status
+# Verification status — 1.2.0
 
-The user requested **no further tests**. The running benchmark was stopped. The current app and its installer have not been launched for runtime testing.
+The user requested no additional runtime tests. The agent did not launch the application, installer, or preflight script, and did not access or migrate the user's live notes database.
+
+| Check | Status | Evidence / scope |
+|---|---|---|
+| Release win-x64 compilation | PASS | Final local build: 0 errors / 0 warnings |
+| Self-contained / framework-dependent packaging | PASS | Package metadata and hashes in artifacts/releases |
+| Inno Setup compilation | PASS | Installer build log and StealthNotes-Setup.exe.json; not an installation test |
+| PowerShell source parsing / source whitespace checks | PASS | Static inspection only; preflight script was not executed |
+| RTF and formatting-only autosave | NOT TESTED | Mixed selection, caret styles, undo/redo, and restart round-trip |
+| Clipboard / image import | NOT TESTED | Files, paste, drop, image-only notes, invalid files, limits, and first-frame GIF |
+| Image persistence and gallery | NOT TESTED | Add/remove/re-add order, failures, preview races, and shutdown with pending writes |
+| Notes list and search | NOT TESTED | Open/close, no duplicate windows, last-open restore, and draft disposal |
+| Ghost preview redaction | NOT TESTED | Text, titles, thumbnails, search, and accessible list strings |
+| v1 → v2 migration | NOT TESTED | Backup, exact old text, closed defaults, cleanup, rollback, and backup failure |
+| Save failure / recovery | NOT TESTED | Not saved indicator, staged image retention, retry, and exit warning |
+| Upgrade preflight | NOT TESTED | Installed and portable copies, same/different user, permissions, Retry/Cancel, and silent failure |
+| Second-instance detection | NOT TESTED | Same copy activation, different version/path, stale metadata, and unverified process |
+| Current ghost / click-through / opacity / hotkeys | NOT TESTED | Includes rich editor, gallery preview, and handle recreation |
+| 20 notes / RAM / responsiveness | NOT TESTED | No production memory measurements or smoothness claim |
+| DPI 100–200% / resize / keyboard focus | NOT TESTED | Source implementation only |
+| Upgrade install / uninstall | NOT TESTED | Stable AppId and data path checked statically; installer not launched |
+| GitHub CI / Release for 1.2.0 | NOT RUN | Changes remain local |
+| macOS / Linux | UNSUPPORTED | Windows-only |
+| Older Windows | NOT TESTED | Installer targets Windows 11 x64 |
+
+## Historical prototype evidence
 
 | Check | Status | Scope |
 |---|---|---|
-| Release win-x64 compilation | PASS | Initial build had 0 errors / 0 warnings; package metadata is in artifacts |
-| Portable / framework-dependent publish | PASS | Compilation and packaging only |
-| Inno Setup installer compilation | PASS | Includes runtime; size and hash are in StealthNotes-Setup.exe.json |
-| Installer install / upgrade / uninstall | NOT TESTED | Installer was not launched |
-| Current app UI / hotkeys / opacity / drag / resize | NOT TESTED | No additional tests requested |
-| SQLite restore after restart | NOT TESTED | Same |
-| 20 notes in the current app | NOT TESTED | Same |
-| Current app idle RAM | NOT TESTED | Prototype numbers are not production measurements |
-| WinForms 10 prototype OBS Display Capture | PASS | DXGI/WGC; the normal comparison note remained visible |
-| WinForms 10 prototype existing OBS Window Capture source | FAIL | The pre-ghost image remained visible |
-| Prototype fresh OBS BitBlt source while ghost was on | FAIL | The old image remained visible |
-| Prototype fresh OBS WGC source while ghost was on | PASS | The note was excluded |
-| Current app OBS / screen sharing | NOT TESTED | Prototype results do not verify the new app |
-| Zero leaked frames on first show / toggle in every recorder | NOT TESTED | The prototype observation at +100 ms is not an atomicity guarantee |
-| macOS / Linux | UNSUPPORTED | Windows-only app |
-| Older Windows | NOT TESTED | The API minimum differs from runtime support |
-| GitHub CI / automated Release | NOT RUN | Workflow files are ready; nothing was published remotely |
+| WinForms 10 interaction prototype | PASS | Earlier 10/10 interaction checks; not current implementation |
+| OBS Display Capture DXGI/WGC | PASS | Prototype only; normal comparison note remained visible |
+| Existing OBS Window Capture source | FAIL | Prototype retained the pre-ghost image |
+| Fresh OBS BitBlt source while ghost was on | FAIL | Prototype old image remained visible |
+| Fresh OBS WGC source while ghost was on | PASS | Prototype note was excluded |
+| Current OBS / screen sharing / zero leaked frames | NOT TESTED | Prototype results do not verify this release |
 
-The earlier prototype passed 10/10 interaction checks; these are not tests of the current implementation. Selected summaries and images are in [evidence](evidence/README.md). Original experimental recordings remain in the parent workspace under `prototypes/artifacts/capture-winforms-final-qualified/` and `capture-native-qualified/`. Default OBS audio tracks were removed without re-encoding the video packets.
+Selected summaries/images remain in [evidence](evidence/README.md). Original recordings remain in the parent experiment workspace; default OBS audio was removed without re-encoding video packets.
 
-English UI and documentation were rebuilt and repackaged without running the app or installer. Historical raw evidence remains unchanged. No claim of being “undetectable” or passing all production gates is made.
+The user manually installed 1.1.0 previously. Read-only diagnosis confirmed its installed files, but found an older portable process still running; this motivated the 1.2 preflight and instance checks. That observation is not a runtime test of the new upgrade handling.
+
+Build and packaging success do not establish feature, migration, performance, upgrade, or capture correctness.
