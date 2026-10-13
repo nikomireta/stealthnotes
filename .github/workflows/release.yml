@@ -1,0 +1,111 @@
+name: Windows installer and release
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Locate project root
+        shell: pwsh
+        run: |
+          $taskProjectRoot = if (Test-Path 'src/StealthNotes/StealthNotes.csproj') { '.' } else { 'stealthnotes' }
+          "APP_ROOT=$taskProjectRoot" >> $env:GITHUB_ENV
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.401'
+      - name: Build and package (no runtime tests)
+        shell: pwsh
+        run: |
+          [xml]$taskProject = Get-Content "$env:APP_ROOT/src/StealthNotes/StealthNotes.csproj"
+          $taskVersion = if ($env:GITHUB_REF -like 'refs/tags/v*') { $env:GITHUB_REF_NAME.Substring(1) } else { [string]$taskProject.Project.PropertyGroup.Version }
+          & "$env:APP_ROOT/scripts/publish.ps1" -Version $taskVersion
+          & "$env:APP_ROOT/scripts/publish.ps1" -FrameworkDependent -Version $taskVersion
+      - name: Prepare installer compiler
+        shell: pwsh
+        run: '& "$env:APP_ROOT/scripts/setup-inno.ps1"'
+      - name: Build installer (not executed)
+        shell: pwsh
+        run: |
+          [xml]$taskProject = Get-Content "$env:APP_ROOT/src/StealthNotes/StealthNotes.csproj"
+          $taskVersion = if ($env:GITHUB_REF -like 'refs/tags/v*') { $env:GITHUB_REF_NAME.Substring(1) } else { [string]$taskProject.Project.PropertyGroup.Version }
+          & "$env:APP_ROOT/scripts/installer.ps1" -Version $taskVersion
+      - uses: actions/upload-artifact@v7
+        with:
+          name: StealthNotes-win-x64
+          path: |
+            ${{ env.APP_ROOT }}/artifacts/releases/*.zip
+            ${{ env.APP_ROOT }}/artifacts/releases/*.json
+            ${{ env.APP_ROOT }}/artifacts/releases/*.exe
+            ${{ env.APP_ROOT }}/artifacts/releases/*.sha256
+          compression-level: 0
+          if-no-files-found: error
+
+  release:
+    needs: build
+    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: StealthNotes-win-x64
+          path: release-assets
+      - name: Publish download to GitHub Releases
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          function Invoke-Gh {
+            & gh @args
+            if ($LASTEXITCODE -ne 0) { throw "GitHub CLI failed: $($args[0])" }
+          }
+          $taskRolling = $env:GITHUB_REF -eq 'refs/heads/main'
+          $taskTag = if ($taskRolling) { 'latest' } else { $env:GITHUB_REF_NAME }
+          $taskTitle = if ($taskRolling) { 'StealthNotes - latest build' } else { "StealthNotes $taskTag" }
+          $taskBody = @(
+            'Download **StealthNotes-Setup.exe**, open it, and click Install. Everything you need is included. Windows 11 x64.',
+            '',
+            'The installer is unsigned, so Windows may show an Unknown publisher or SmartScreen warning.',
+            '',
+            'Build and packaging only; the app and installer have not been runtime tested. Ghost may not hide notes from every recorder or screen share. See docs/VERIFICATION.md for details.',
+            '',
+            "Commit: $env:GITHUB_SHA"
+          ) -join "`n"
+          $taskNotes = Join-Path $env:RUNNER_TEMP 'stealthnotes-release.md'
+          [IO.File]::WriteAllText($taskNotes, $taskBody)
+          if ($taskRolling) {
+            & gh api "repos/$env:GITHUB_REPOSITORY/git/ref/tags/latest" --silent 2>$null
+            if ($LASTEXITCODE -eq 0) {
+              Invoke-Gh api --method PATCH "repos/$env:GITHUB_REPOSITORY/git/refs/tags/latest" -f "sha=$env:GITHUB_SHA" -F force=true --silent
+            } else {
+              Invoke-Gh api --method POST "repos/$env:GITHUB_REPOSITORY/git/refs" -f ref=refs/tags/latest -f "sha=$env:GITHUB_SHA" --silent
+            }
+          }
+          & gh release view $taskTag --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -eq 0) {
+            if (-not $taskRolling) { throw 'Version release already exists; use a new version tag.' }
+            Invoke-Gh release edit $taskTag --repo $env:GITHUB_REPOSITORY --title $taskTitle --notes-file $taskNotes --latest
+          } else {
+            Invoke-Gh release create $taskTag --repo $env:GITHUB_REPOSITORY --verify-tag --title $taskTitle --notes-file $taskNotes --latest
+          }
+          $taskAssets = @(Get-ChildItem -LiteralPath 'release-assets' -File | ForEach-Object { $_.FullName })
+          Invoke-Gh release upload $taskTag @taskAssets --repo $env:GITHUB_REPOSITORY --clobber

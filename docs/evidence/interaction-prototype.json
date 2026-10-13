@@ -1,0 +1,101 @@
+{
+  "testedUtc": "2026-10-13T09:26:53.9425513+00:00",
+  "app": "C:\\Users\\HETI\\Documents\\myproject\\StealthNotes\\prototypes\\artifacts\\publish\\winforms10-scd\\StealthNotes.WinForms.Experiment.exe",
+  "os": "Microsoft Windows NT 10.0.26300.0",
+  "tests": [
+    {
+      "name": "ghost-native-state",
+      "status": "BERHASIL",
+      "observed": {
+        "affinity": 17,
+        "style": "0x80d0028",
+        "visible": true
+      }
+    },
+    {
+      "name": "click-through-to-separate-window",
+      "status": "BERHASIL",
+      "observed": {
+        "before": 0,
+        "after": 1,
+        "hit": "0xe0c58",
+        "expectedReceiver": "0xe0c58"
+      }
+    },
+    {
+      "name": "ghost-opacity-native-alpha",
+      "status": "BERHASIL",
+      "observed": {
+        "opacity": 0.6,
+        "alpha": 153,
+        "alphaFlags": 2
+      }
+    },
+    {
+      "name": "recovery-hotkey-from-ghost",
+      "status": "BERHASIL",
+      "observed": {
+        "affinity": 0,
+        "style": "0xd0008"
+      }
+    },
+    {
+      "name": "normal-opacity-native-alpha",
+      "status": "BERHASIL",
+      "observed": {
+        "normalAlpha": 255
+      }
+    },
+    {
+      "name": "normal-mode-intercepts-click",
+      "status": "BERHASIL",
+      "observed": {
+        "before": 1,
+        "after": 1
+      }
+    },
+    {
+      "name": "slider-input-updates-opacity",
+      "status": "BERHASIL",
+      "observed": {
+        "slider": "0x130c76",
+        "opacity": 0.1
+      }
+    },
+    {
+      "name": "drag-title-moves-window",
+      "status": "BERHASIL",
+      "observed": {
+        "before": {
+          "x": 100,
+          "y": 100
+        },
+        "after": {
+          "x": 140,
+          "y": 130
+        }
+      }
+    },
+    {
+      "name": "resize-grip-resizes-window",
+      "status": "BERHASIL",
+      "observed": {
+        "before": {
+          "w": 320,
+          "h": 240
+        },
+        "after": {
+          "w": 355,
+          "h": 265
+        }
+      }
+    },
+    {
+      "name": "normal-opacity-restored-after-toggle",
+      "status": "BERHASIL",
+      "observed": {
+        "opacity": 1
+      }
+    }
+  ]
+}

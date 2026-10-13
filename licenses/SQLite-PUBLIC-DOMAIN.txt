@@ -1,0 +1,1 @@
+﻿SQLite engine: public domain. The e_sqlite3 binary wrapper/package is distributed under the SQLitePCLRaw Apache-2.0 license. https://www.sqlite.org/copyright.html

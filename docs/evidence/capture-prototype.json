@@ -1,0 +1,161 @@
+{
+  "analyzedUtc": "2026-10-13T09:44:47.958Z",
+  "definition": "All decoded frames using actual ffprobe dimensions (encoder rounds width to 648); interior pixels at 2px spacing; yellow note, blue backdrop, black rectangle. Second normal note positive control uses non-blue header pixels (native STATIC is grey, managed header is yellow). Window capture must preserve backdrop rather than a black rectangle or cached note.",
+  "tests": [
+    {
+      "method": "display-dxgi",
+      "status": "BERHASIL",
+      "phases": [
+        {
+          "mode": "normal",
+          "recording": "C:/Users/HETI/Documents/myproject/StealthNotes/prototypes/artifacts/capture-winforms-final-qualified/StealthNotes-2026-10-13-16-43-44.mkv",
+          "frames": 66,
+          "minYellow": 0.7708360763660302,
+          "maxYellow": 0.7712310730743911,
+          "minBlue": 0,
+          "maxBlack": 0.00467412771560237,
+          "minRightHeaderNonBlue": 1
+        },
+        {
+          "mode": "ghost",
+          "recording": "C:/Users/HETI/Documents/myproject/StealthNotes/prototypes/artifacts/capture-winforms-final-qualified/StealthNotes-2026-10-13-16-43-50.mkv",
+          "frames": 65,
+          "minYellow": 0,
+          "maxYellow": 0,
+          "minBlue": 1,
+          "maxBlack": 0,
+          "minRightHeaderNonBlue": 1
+        }
+      ]
+    },
+    {
+      "method": "display-wgc",
+      "status": "BERHASIL",
+      "phases": [
+        {
+          "mode": "normal",
+          "recording": "C:/Users/HETI/Documents/myproject/StealthNotes/prototypes/artifacts/capture-winforms-final-qualified/StealthNotes-2026-10-13-16-43-56.mkv",
+          "frames": 66,
+          "minYellow": 0.7708360763660302,
+          "maxYellow": 0.7712310730743911,
+          "minBlue": 0,
+          "maxBlack": 0.00467412771560237,
+          "minRightHeaderNonBlue": 1
+        },
+        {
+          "mode": "ghost",
+          "recording": "C:/Users/HETI/Documents/myproject/StealthNotes/prototypes/artifacts/capture-winforms-final-qualified/StealthNotes-2026-10-13-16-44-03.mkv",
+          "frames": 66,
+          "minYellow": 0,
+          "maxYellow": 0,
+          "minBlue": 1,
+          "maxBlack": 0,
+          "minRightHeaderNonBlue": 1
+        }
+      ]
+    },
+    {
+      "method": "window-bitblt",
+      "status": "GAGAL",
+      "phases": [
+        {
+          "mode": "normal",
+          "recording": "C:/Users/HETI/Documents/myproject/StealthNotes/prototypes/artifacts/capture-winforms-final-qualified/StealthNotes-2026-10-13-16-44-09.mkv",
+          "frames": 66,
+          "minYellow": 0.7708360763660302,
+          "maxYellow": 0.7711652402896643,
+          "minBlue": 0,
+          "maxBlack": 0.00467412771560237,
+          "minRightHeaderNonBlue": 0
+        },
+        {
+          "mode": "ghost",
+          "recording": "C:/Users/HETI/Documents/myproject/StealthNotes/prototypes/artifacts/capture-winforms-final-qualified/StealthNotes-2026-10-13-16-44-15.mkv",
+          "frames": 66,
+          "minYellow": 0.7708360763660302,
+          "maxYellow": 0.7711652402896643,
+          "minBlue": 0,
+          "maxBlack": 0.00467412771560237,
+          "minRightHeaderNonBlue": 0
+        }
+      ]
+    },
+    {
+      "method": "window-bitblt-fresh",
+      "status": "GAGAL",
+      "phases": [
+        {
+          "mode": "ghost-fresh",
+          "recording": "C:/Users/HETI/Documents/myproject/StealthNotes/prototypes/artifacts/capture-winforms-final-qualified/StealthNotes-2026-10-13-16-44-20.mkv",
+          "frames": 66,
+          "minYellow": 0.7708360763660302,
+          "maxYellow": 0.7711652402896643,
+          "minBlue": 0,
+          "maxBlack": 0.00467412771560237,
+          "minRightHeaderNonBlue": 0
+        }
+      ]
+    },
+    {
+      "method": "window-wgc",
+      "status": "GAGAL",
+      "phases": [
+        {
+          "mode": "normal",
+          "recording": "C:/Users/HETI/Documents/myproject/StealthNotes/prototypes/artifacts/capture-winforms-final-qualified/StealthNotes-2026-10-13-16-44-26.mkv",
+          "frames": 66,
+          "minYellow": 0.7708360763660302,
+          "maxYellow": 0.7711652402896643,
+          "minBlue": 0,
+          "maxBlack": 0.00467412771560237,
+          "minRightHeaderNonBlue": 0
+        },
+        {
+          "mode": "ghost",
+          "recording": "C:/Users/HETI/Documents/myproject/StealthNotes/prototypes/artifacts/capture-winforms-final-qualified/StealthNotes-2026-10-13-16-44-32.mkv",
+          "frames": 66,
+          "minYellow": 0.7708360763660302,
+          "maxYellow": 0.7711652402896643,
+          "minBlue": 0,
+          "maxBlack": 0.00467412771560237,
+          "minRightHeaderNonBlue": 0
+        }
+      ]
+    },
+    {
+      "method": "window-wgc-fresh",
+      "status": "BERHASIL",
+      "phases": [
+        {
+          "mode": "ghost-fresh",
+          "recording": "C:/Users/HETI/Documents/myproject/StealthNotes/prototypes/artifacts/capture-winforms-final-qualified/StealthNotes-2026-10-13-16-44-37.mkv",
+          "frames": 66,
+          "minYellow": 0,
+          "maxYellow": 0,
+          "minBlue": 1,
+          "maxBlack": 0,
+          "minRightHeaderNonBlue": 0
+        }
+      ]
+    }
+  ],
+  "transitions": [
+    {
+      "method": "display-dxgi",
+      "recording": "C:/Users/HETI/Documents/myproject/StealthNotes/prototypes/artifacts/capture-winforms-final-qualified/StealthNotes-2026-10-13-16-44-42.mkv",
+      "recordStartedUtc": "2026-10-13T09:44:42.922Z",
+      "commandStartedUtc": "2026-10-13T09:44:43.929Z",
+      "commandReturnedUtc": "2026-10-13T09:44:44.687Z",
+      "commandStartedMs": 1007,
+      "commandReturnedMs": 1765,
+      "obsReportedStartedMs": 266,
+      "obsReportedReturnedMs": 999,
+      "note": "Timing uses wall time from StartRecord request; OBS outputDuration lags encoding. Normal frames before the command are expected; no claim of zero-frame atomic transition.",
+      "frames": 119,
+      "lastNoteFrame": 51,
+      "maxYellowAfterCommandPlus100ms": 0,
+      "status": "BERHASIL",
+      "scope": "Absence after command return + 100ms; not a zero-latency guarantee"
+    }
+  ]
+}

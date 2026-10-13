@@ -1,0 +1,12 @@
+**/bin/
+**/obj/
+artifacts/
+.vs/
+.idea/
+*.user
+*.suo
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+errors.log*
+.tools/

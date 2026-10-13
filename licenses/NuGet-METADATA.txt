@@ -1,0 +1,8 @@
+﻿Package metadata from the resolved NuGet packages. See the adjacent full license texts.
+
+Microsoft.Data.Sqlite 10.0.12 License: MIT Copyright: © Microsoft Corporation. All rights reserved. Authors: Microsoft Project: https://docs.microsoft.com/dotnet/standard/data/sqlite/ 
+Microsoft.Data.Sqlite.Core 10.0.12 License: MIT Copyright: © Microsoft Corporation. All rights reserved. Authors: Microsoft Project: https://docs.microsoft.com/dotnet/standard/data/sqlite/ 
+SQLitePCLRaw.bundle_e_sqlite3 2.1.12 License: Apache-2.0 Copyright: Copyright 2014-2024 SourceGear, LLC Authors: Eric Sink Project:  
+SQLitePCLRaw.core 2.1.12 License: Apache-2.0 Copyright: Copyright 2014-2024 SourceGear, LLC Authors: Eric Sink Project:  
+SQLitePCLRaw.lib.e_sqlite3 2.1.12 License: Apache-2.0 Copyright: Copyright 2014-2024 SourceGear, LLC Authors: Eric Sink Project:  
+SQLitePCLRaw.provider.e_sqlite3 2.1.12 License: Apache-2.0 Copyright: Copyright 2014-2024 SourceGear, LLC Authors: Eric Sink Project:  
