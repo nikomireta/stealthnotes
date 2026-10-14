@@ -13,23 +13,24 @@ internal sealed class ImageStore : IDisposable
 {
     const int MaxBytes=10*1024*1024;
     readonly string databasePath;
-    readonly SynchronizationContext ui;
     readonly SemaphoreSlim decoder=new(1,1);
     readonly CancellationTokenSource shutdown=new();
     readonly object stagingLock=new();
     readonly Dictionary<Guid,Pending> staged=[];
-    readonly Dictionary<Guid,LinkedListNode<(Guid Id,Bitmap Bitmap)>> thumbnails=[];
-    readonly LinkedList<(Guid Id,Bitmap Bitmap)> recent=[];
-    readonly HashSet<Guid> requested=[],failed=[];
+    public PreviewCache Previews {get;}
     volatile bool disposed;
     sealed class Pending(ImagePayload payload){public ImagePayload Payload=payload;public bool Live=true;public int Leases;}
-    public event Action<Guid>? ThumbnailReady;
-    public ImageStore(string databasePath,SynchronizationContext ui){this.databasePath=databasePath;this.ui=ui;}
-
-    async Task<T> Decode<T>(Func<T> work)
+    public ImageStore(string databasePath,SynchronizationContext ui)
     {
-        await decoder.WaitAsync(shutdown.Token).ConfigureAwait(false);
-        try{return await Task.Run(work,shutdown.Token).ConfigureAwait(false);}
+        this.databasePath=databasePath;
+        Previews=new((key,token)=>Decode(()=>DecodePreview(key,token),token),ui);
+    }
+
+    async Task<T> Decode<T>(Func<T> work,CancellationToken cancellation=default)
+    {
+        using var linked=CancellationTokenSource.CreateLinkedTokenSource(shutdown.Token,cancellation);
+        await decoder.WaitAsync(linked.Token).ConfigureAwait(false);
+        try{return await Task.Run(work,linked.Token).ConfigureAwait(false);}
         finally{decoder.Release();}
     }
     public async Task<NoteImage> ImportFile(string path)
@@ -73,6 +74,7 @@ internal sealed class ImageStore : IDisposable
     public void SetLiveReferences(Snapshot state)
     {
         var ids=state.Notes.Values.SelectMany(n=>n.Images).Select(i=>i.Id).ToHashSet();
+        Previews.Retain(ids);
         lock(stagingLock)foreach(var (id,item) in staged.ToArray()){
             item.Live=ids.Contains(id);if(!item.Live&&item.Leases==0)staged.Remove(id);
         }
@@ -98,36 +100,22 @@ internal sealed class ImageStore : IDisposable
         c.Parameters.AddWithValue("$id",id.ToString("N"));
         return c.ExecuteScalar() as byte[]??throw new InvalidOperationException("The image is no longer available.");
     }
-    // Accessed only by UI painting. Controls draw the cached bitmap immediately and never retain it.
-    public Bitmap? Thumbnail(Guid id)
+    Bitmap DecodePreview(PreviewKey key,CancellationToken cancellation)
     {
-        if(disposed)return null;
-        if(thumbnails.TryGetValue(id,out var node)){recent.Remove(node);recent.AddFirst(node);return node.Value.Bitmap;}
-        if(!failed.Contains(id)&&requested.Add(id))_ = FetchThumbnail(id);
-        return null;
+        cancellation.ThrowIfCancellationRequested();
+        using var input=new MemoryStream(Read(key.Id,false),false);
+        using var image=Image.FromStream(input,true,true);CheckSize(image.Width,image.Height);
+        double scale=Math.Min(1,Math.Min((double)key.Width/image.Width,Math.Sqrt(2_000_000d/((long)image.Width*image.Height))));
+        var result=new Bitmap(Math.Max(1,(int)(image.Width*scale)),Math.Max(1,(int)(image.Height*scale)),PixelFormat.Format32bppPArgb);
+        try {
+            cancellation.ThrowIfCancellationRequested();
+            using(var graphics=Graphics.FromImage(result)){
+                graphics.InterpolationMode=InterpolationMode.HighQualityBicubic;
+                graphics.Clear(Color.Transparent);graphics.DrawImage(image,new Rectangle(0,0,result.Width,result.Height));
+            }
+            cancellation.ThrowIfCancellationRequested();return result;
+        }catch {result.Dispose();throw;}
     }
-    public bool ThumbnailFailed(Guid id)=>failed.Contains(id);
-    async Task FetchThumbnail(Guid id)
-    {
-        Bitmap? bitmap=null;Exception? error=null;
-        try {bitmap=await Decode(()=>{using var input=new MemoryStream(Read(id,true),false);using var image=Image.FromStream(input);return Resize(image,256);}).ConfigureAwait(false);}
-        catch(Exception e){error=e;}
-        if(disposed){bitmap?.Dispose();return;}
-        var result=bitmap;var failure=error;
-        ui.Post(_=>{
-            if(disposed){result?.Dispose();return;}
-            requested.Remove(id);
-            if(result is not null){
-                var node=recent.AddFirst((id,result));thumbnails[id]=node;
-                while(recent.Count>32){var oldest=recent.Last!;recent.RemoveLast();thumbnails.Remove(oldest.Value.Id);oldest.Value.Bitmap.Dispose();}
-            }else {failed.Add(id);if(failure is not OperationCanceledException&&failure is not null)LocalLog.Error("Thumbnail read failed",failure);}
-            ThumbnailReady?.Invoke(id);
-        },null);
-    }
-    public Task<Bitmap> Preview(Guid id)=>Decode(()=>{
-        using var input=new MemoryStream(Read(id,false),false);using var image=Image.FromStream(input,true,true);
-        CheckSize(image.Width,image.Height);return Resize(image,1024);
-    });
     public static Rectangle Fit(Size image,Rectangle bounds)
     {
         double scale=Math.Min((double)bounds.Width/image.Width,(double)bounds.Height/image.Height);
@@ -177,7 +165,7 @@ internal sealed class ImageStore : IDisposable
     public void Dispose()
     {
         disposed=true;shutdown.Cancel();
-        foreach(var item in recent)item.Bitmap.Dispose();recent.Clear();thumbnails.Clear();
+        Previews.Dispose();
         lock(stagingLock)staged.Clear();
     }
 }

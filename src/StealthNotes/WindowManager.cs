@@ -50,6 +50,12 @@ internal sealed class WindowManager : IDisposable
         if(lastActive is { } id&&state.Current.Notes.TryGetValue(id,out var note)&&note.IsOpen)return id;
         return state.Current.Notes.Values.LastOrDefault(n=>n.IsOpen)?.Id;
     }
+    public void ActivateRecent()
+    {
+        Guid? id=lastActive is { } previous&&state.Current.Notes.TryGetValue(previous,out var note)&&note.IsOpen?previous:
+            state.Current.Notes.Values.Where(n=>n.IsOpen).OrderByDescending(n=>n.UpdatedAt).ThenBy(n=>n.Id).FirstOrDefault()?.Id;
+        if(id is { } target)Activate(target);
+    }
     public void Activate(Guid id)
     {
         lastActive=id;

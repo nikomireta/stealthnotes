@@ -8,7 +8,7 @@ internal sealed class NotesContext : ApplicationContext
     readonly Hotkeys hotkeys;
     readonly Tray tray;
     readonly ImageStore images;
-    readonly NotesListWindow notesList;
+    NotesListWindow? notesList;
     readonly Control dispatcher=new();
     readonly RegisteredWaitHandle? wait;
     SettingsDialog? settings;
@@ -25,12 +25,11 @@ internal sealed class NotesContext : ApplicationContext
         persistence=new(store,images,ui);
         hotkeys=new();
         windows=new(state,new GhostService(),images);
-        notesList=new(state,images,NewNote,OpenNote,OpenSettings);
-        tray=new(NewNote,ShowList,ShowAll,()=>state.Dispatch(new SetAllHidden(true)),()=>ToggleGlobalGhost(),OpenSettings,()=>Quit(false));
+        tray=new(NewNote,ShowList,ActivateNotes,ShowAll,()=>state.Dispatch(new SetAllHidden(true)),()=>ToggleGlobalGhost(),OpenSettings,()=>Quit(false));
         windows.NewRequested+=NewNote;
         windows.ListRequested+=ShowList;
         windows.GhostFailed+=error=>{LocalLog.Error("Ghost failed",new InvalidOperationException(error));tray.Warning("Could not enable ghost mode. "+error);};
-        state.Changed+=images.SetLiveReferences;state.Changed+=persistence.Schedule;state.Changed+=tray.Render;state.Changed+=notesList.Render;
+        state.Changed+=images.SetLiveReferences;state.Changed+=persistence.Schedule;state.Changed+=tray.Render;state.Changed+=RenderList;
         persistence.StatusChanged+=e=>{
             windows.SetSaveError(e is not null);
             if(e is not null)tray.Warning("Could not save your notes. Resolve the disk issue before closing the app. See errors.log.");
@@ -40,10 +39,10 @@ internal sealed class NotesContext : ApplicationContext
         hotkeys.EndSession=()=>Quit(true);
         bool configured=hotkeys.Configure(state.Current.Hotkeys,out string keyError);
         windows.Render(state.Current);tray.Render(state.Current);
-        persistence.Schedule(state.Current);notesList.ShowList();
+        images.SetLiveReferences(state.Current);persistence.Schedule(state.Current);ActivateNotes();
         wait=ThreadPool.RegisterWaitForSingleObject(openEvent,(_,timedOut)=>{
             if(disposed||dispatcher.IsDisposed)return;
-            try { dispatcher.BeginInvoke((Action)ShowList); }
+            try { dispatcher.BeginInvoke((Action)ActivateNotes); }
             catch(InvalidOperationException){ /* Application is shutting down. */ }
         },null,Timeout.Infinite,false);
         if(!configured)dispatcher.BeginInvoke((Action)(()=>{
@@ -60,8 +59,22 @@ internal sealed class NotesContext : ApplicationContext
         var note=new Note(Guid.NewGuid(),"","yellow",bounds.X,bounds.Y,bounds.Width,bounds.Height,false,1,.35,now,now);
         state.Dispatch(new AddNote(note));windows.Activate(note.Id);
     }
-    void ShowList()=>notesList.ShowList();
-    void OpenNote(Guid id){state.Dispatch(new OpenNote(id));windows.Activate(id);}
+    void RenderList(Snapshot next)=>notesList?.Render(next);
+    void ShowList()
+    {
+        notesList??=new(state,images,NewNote,OpenNote,OpenSettings);
+        notesList.ShowList();
+    }
+    void ActivateNotes()
+    {
+        if(quitting||disposed)return;
+        if(state.Current.Notes.Values.Any(n=>n.IsOpen)){
+            state.Dispatch(new SetAllHidden(false));windows.Render(state.Current,true);windows.ActivateRecent();
+        }else if(state.Current.Notes.Values.OrderByDescending(n=>n.UpdatedAt).ThenBy(n=>n.Id).FirstOrDefault() is { } latest)
+            OpenNote(latest.Id);
+        else NewNote();
+    }
+    void OpenNote(Guid id){state.Dispatch(new OpenNote(id));windows.Render(state.Current,true);windows.Activate(id);}
     void ShowAll(){state.Dispatch(new OpenAllNotes());windows.Render(state.Current,true);}
     void ToggleGlobalGhost()
     {
@@ -108,8 +121,8 @@ internal sealed class NotesContext : ApplicationContext
     protected override void Dispose(bool disposing)
     {
         if(disposing&&!disposed){
-            disposed=true;wait?.Unregister(null);settings?.Dispose();hotkeys.Dispose();windows.Dispose();notesList.Destroy();tray.Dispose();
-            state.Changed-=images.SetLiveReferences;state.Changed-=notesList.Render;
+            disposed=true;wait?.Unregister(null);settings?.Dispose();hotkeys.Dispose();windows.Dispose();notesList?.Destroy();tray.Dispose();
+            state.Changed-=images.SetLiveReferences;state.Changed-=RenderList;
             state.Changed-=persistence.Schedule;state.Changed-=tray.Render;persistence.Dispose();images.Dispose();dispatcher.Dispose();
         }
         base.Dispose(disposing);

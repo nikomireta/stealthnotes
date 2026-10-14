@@ -1,78 +1,69 @@
+using System.Drawing.Drawing2D;
+
 namespace StealthNotes;
 
-internal sealed class NoteGallery : BufferedPanel
+// Virtual image strip painted into the viewport, never a huge off-screen control/buffer.
+internal sealed class NoteGallery : IDisposable
 {
-    readonly ImageStore images;
-    readonly Button previous=new(){Text="‹",AccessibleName="Previous image"},next=new(){Text="›",AccessibleName="Next image"};
-    readonly Button remove=new(){Text="Remove",AutoSize=true},back=new(){Text="Back",AutoSize=true};
-    readonly Label counter=new(){TextAlign=ContentAlignment.MiddleCenter};
-    readonly BufferedPanel canvas=new(){Cursor=Cursors.Hand,AccessibleName="Image preview. Click to enlarge."};
-    IReadOnlyList<NoteImage> items=Array.Empty<NoteImage>();
-    int index,requestVersion;
-    Bitmap? preview;
-    bool expanded,disposed;
+    readonly PreviewCache.Session previews;
+    readonly ContextMenuStrip menu=new();
+    IReadOnlyList<NoteImage> attachments=Array.Empty<NoteImage>();
+    readonly List<(NoteImage Image,Rectangle Bounds)> frames=[];
+    Guid? contextImage;
+    Color paper,ink;
+    Rectangle viewport;
+    int measuredWidth,measuredGap;
+    bool visible,disposed;
     public event Action<Guid>? RemoveRequested;
-    public event Action? ExpansionChanged;
-    public bool Expanded=>expanded;
+    public event Action? LayoutRequested,RepaintRequested;
     public NoteGallery(ImageStore images)
     {
-        this.images=images;Height=96;
-        Controls.AddRange([canvas,previous,next,counter,remove,back]);back.Visible=false;
-        previous.Click+=(_,_)=>Select(index-1);next.Click+=(_,_)=>Select(index+1);
-        remove.Click+=(_,_)=>{if(items.Count>0)RemoveRequested?.Invoke(items[index].Id);};
-        back.Click+=(_,_)=>Collapse();canvas.Click+=async(_,_)=>await Expand();
-        canvas.Paint+=PaintImage;images.ThumbnailReady+=ThumbnailReady;SizeChanged+=(_,_)=>Arrange();
-        foreach(var b in new[]{previous,next,remove,back}){b.FlatStyle=FlatStyle.Flat;b.FlatAppearance.BorderSize=0;b.Cursor=Cursors.Hand;}
+        previews=images.Previews.CreateSession(()=>RepaintRequested?.Invoke());
+        menu.Items.Add("Remove image",null,(_,_)=>{if(contextImage is { } id)RemoveRequested?.Invoke(id);});
     }
-    public void Render(IReadOnlyList<NoteImage> current,Color paper,Color ink)
+    public void Render(IReadOnlyList<NoteImage> images,Color background,Color foreground)
     {
-        Guid? selected=items.Count>0?items[index].Id:null;
-        bool changed=!items.Select(i=>i.Id).SequenceEqual(current.Select(i=>i.Id));items=current;
-        if(changed){int found=selected is null?-1:current.ToList().FindIndex(i=>i.Id==selected);index=Math.Max(0,found);Collapse();}
-        Visible=current.Count>0;BackColor=paper;ForeColor=ink;canvas.BackColor=paper;
-        foreach(Control c in new Control[]{previous,next,counter,remove,back}){c.BackColor=paper;c.ForeColor=ink;}
-        UpdateCounter();Arrange();canvas.Invalidate();
+        attachments=images;paper=background;ink=foreground;measuredWidth=0;
+        LayoutRequested?.Invoke();RepaintRequested?.Invoke();
     }
-    void ThumbnailReady(Guid id){if(items.Count>0&&items[index].Id==id)canvas.Invalidate();}
-    void UpdateCounter(){counter.Text=items.Count==0?"":"Image "+(index+1)+" / "+items.Count;previous.Enabled=index>0;next.Enabled=index+1<items.Count;}
-    void Select(int nextIndex){if(nextIndex<0||nextIndex>=items.Count)return;Collapse();index=nextIndex;UpdateCounter();canvas.Invalidate();}
-    void Arrange()
+    public int MeasureHeight(int width,int gap)
     {
-        int S(int n)=>(int)Math.Round(n*DeviceDpi/96d);int bar=S(28);
-        previous.SetBounds(S(4),0,S(26),bar);next.SetBounds(S(32),0,S(26),bar);
-        remove.SetBounds(Math.Max(0,Width-S(66)),0,S(62),bar);
-        back.SetBounds(Math.Max(0,Width-S(122)),0,S(52),bar);
-        counter.SetBounds(S(60),0,Math.Max(0,Width-S(expanded?186:130)),bar);
-        canvas.SetBounds(S(8),bar,Math.Max(0,Width-S(16)),Math.Max(0,Height-bar-S(6)));
+        if(width==measuredWidth&&gap==measuredGap)return frames.Count==0?0:frames[^1].Bounds.Bottom;
+        measuredWidth=width;measuredGap=gap;frames.Clear();int y=0;
+        foreach(var image in attachments){
+            int height=(int)Math.Clamp(Math.Round((double)width*Math.Max(1,image.Height)/Math.Max(1,image.Width)),1,1_000_000);
+            frames.Add((image,new(0,y,width,height)));y=checked(y+height+gap);
+        }
+        return frames.Count==0?0:frames[^1].Bounds.Bottom;
     }
-    void PaintImage(object? sender,PaintEventArgs e)
+    public void UpdateViewport(Rectangle bounds,bool isVisible)
     {
-        if(items.Count==0)return;
-        Image? image=preview??images.Thumbnail(items[index].Id);
-        if(image is null){TextRenderer.DrawText(e.Graphics,images.ThumbnailFailed(items[index].Id)?"Image unavailable — click to retry":"Loading image…",Font,canvas.ClientRectangle,ForeColor,TextFormatFlags.HorizontalCenter|TextFormatFlags.VerticalCenter);return;}
-        if(canvas.Width>0&&canvas.Height>0)e.Graphics.DrawImage(image,ImageStore.Fit(image.Size,canvas.ClientRectangle));
+        if(disposed)return;viewport=bounds;visible=isVisible;RequestVisible();
     }
-    async Task Expand()
+    void RequestVisible()=>previews.Request(visible?
+        frames.Where(f=>f.Bounds.IntersectsWith(viewport)).Select(f=>PreviewKey.For(f.Image.Id,f.Bounds.Width)):
+        Array.Empty<PreviewKey>());
+    public void Draw(Graphics graphics,Font font)
     {
-        if(items.Count==0||expanded)return;
-        expanded=true;back.Visible=true;ExpansionChanged?.Invoke();Arrange();
-        int version=++requestVersion;Guid id=items[index].Id;
-        try {
-            var bitmap=await images.Preview(id);
-            if(disposed||!expanded||version!=requestVersion){bitmap.Dispose();return;}
-            preview?.Dispose();preview=bitmap;canvas.Invalidate();
-        }catch(OperationCanceledException){}
-        catch(Exception e){if(!disposed&&version==requestVersion){Collapse();MessageBox.Show(FindForm(),e.Message,"Could not open image",MessageBoxButtons.OK,MessageBoxIcon.Warning);}}
+        RequestVisible();graphics.InterpolationMode=InterpolationMode.HighQualityBicubic;
+        foreach(var frame in frames){
+            if(!frame.Bounds.IntersectsWith(viewport))continue;
+            var key=PreviewKey.For(frame.Image.Id,frame.Bounds.Width);var bitmap=previews.Get(key);
+            if(bitmap is not null)graphics.DrawImage(bitmap,ImageStore.Fit(bitmap.Size,frame.Bounds));
+            else {
+                using var brush=new SolidBrush(NoteChrome.Blend(paper,ink,.06f));graphics.FillRectangle(brush,frame.Bounds);
+                var area=Rectangle.Intersect(frame.Bounds,viewport);
+                // GDI TextRenderer does not follow Graphics transforms; use DrawString here.
+                using var text=new SolidBrush(ink);using var format=new StringFormat {Alignment=StringAlignment.Center,LineAlignment=StringAlignment.Center};
+                graphics.DrawString(previews.Failed(key)?"Image unavailable":"Loading image...",font,text,area,format);
+            }
+        }
     }
-    public void Collapse()
+    public void ShowContextMenu(Control owner,Point point,Point origin)
     {
-        requestVersion++;preview?.Dispose();preview=null;
-        if(expanded){expanded=false;back.Visible=false;ExpansionChanged?.Invoke();}
-        if(!disposed){Arrange();canvas.Invalidate();}
+        var imagePoint=new Point(point.X-origin.X,point.Y-origin.Y);
+        contextImage=frames.Where(f=>f.Bounds.Contains(imagePoint)).Select(f=>(Guid?)f.Image.Id).FirstOrDefault();
+        if(contextImage is not null)menu.Show(owner,point);
     }
-    protected override void Dispose(bool disposing)
-    {
-        if(disposing&&!disposed){disposed=true;requestVersion++;images.ThumbnailReady-=ThumbnailReady;preview?.Dispose();preview=null;}
-        base.Dispose(disposing);
-    }
+    public void Dispose(){if(disposed)return;disposed=true;previews.Dispose();menu.Dispose();}
 }

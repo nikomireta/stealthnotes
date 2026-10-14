@@ -8,7 +8,8 @@ internal sealed class NoteWindow : Form
     readonly GhostService ghosts;
     readonly ImageStore images;
     readonly NoteEditor editor;
-    readonly BufferedPanel header,paper,toolbar;
+    readonly BufferedPanel header,toolbar;
+    readonly NoteContent paper;
     readonly NoteGallery gallery;
     readonly List<Button> formattingButtons=[];
     readonly List<Font> formattingFonts=[];
@@ -49,10 +50,9 @@ internal sealed class NoteWindow : Form
         more=HeaderButton(NoteGlyph.More,"Color and opacity");more.TabIndex=2;
         hide=HeaderButton(NoteGlyph.Close,"Close note (discard empty draft)");hide.TabIndex=3;
         header.Controls.AddRange([title,add,ghost,more,hide]);
-        editor=new NoteEditor {Dock=DockStyle.Fill,Margin=Padding.Empty,TabIndex=0};
-        paper=new BufferedPanel {Dock=DockStyle.Fill,Padding=new(16),TabIndex=0};paper.Controls.Add(editor);
-        gallery=new(images){Dock=DockStyle.Bottom,Visible=false};paper.Controls.Add(gallery);
-        gallery.ExpansionChanged+=()=>{editor.Visible=!gallery.Expanded;gallery.Dock=gallery.Expanded?DockStyle.Fill:DockStyle.Bottom;paper.PerformLayout();};
+        editor=new NoteEditor {Margin=Padding.Empty,TabIndex=0};
+        gallery=new(images);
+        paper=new NoteContent(editor,gallery){Dock=DockStyle.Fill,Padding=new(16),TabIndex=0};
         gallery.RemoveRequested+=id=>{
             if(MessageBox.Show(this,"Remove this image?","StealthNotes",MessageBoxButtons.YesNo,MessageBoxIcon.Question,MessageBoxDefaultButton.Button2)==DialogResult.Yes)
                 state.Dispatch(new RemoveImage(NoteId,id));
@@ -102,7 +102,7 @@ internal sealed class NoteWindow : Form
         editor.FilesPasted+=async files=>await ImportFiles(files);
         editor.FormattingChanged+=UpdateFormatting;
         AllowDrop=true;editor.AllowDrop=true;
-        foreach(var control in new Control[]{this,editor,paper,gallery}){
+        foreach(var control in new Control[]{this,editor,paper}){
             control.AllowDrop=true;
             control.DragEnter+=(_,e)=>{if(!effectiveGhost&&e.Data?.GetDataPresent(DataFormats.FileDrop)==true)e.Effect=DragDropEffects.Copy;};
             control.DragDrop+=async(_,e)=>{if(!effectiveGhost&&e.Data?.GetData(DataFormats.FileDrop) is string[] files)await ImportFiles(files);};
@@ -178,7 +178,7 @@ internal sealed class NoteWindow : Form
         add.SetBounds(S(5),S(3),width,height);title.SetBounds(S(43),S(3),Math.Max(0,right-S(47)),height);
         paper.Padding=new(S(16));
         for(int i=0;i<formattingButtons.Count;i++)formattingButtons[i].SetBounds(S(8+i*32),S(3),S(30),S(30));
-        if(!gallery.Expanded)gallery.Height=Math.Min(S(96),Math.Max(S(48),ClientSize.Height-S(36+36+8+32+44)));
+        paper.RefreshContent();
         float headerSize=(float)(12*DeviceDpi/96d);
         if(headerFont is null||Math.Abs(headerFont.Size-headerSize)>.1){
             var oldHeader=headerFont;
@@ -250,7 +250,6 @@ internal sealed class NoteWindow : Form
     {
         if(keyData==(Keys.Control|Keys.N)){NewRequested?.Invoke();return true;}
         if(keyData==(Keys.Control|Keys.H)){ListRequested?.Invoke();return true;}
-        if(keyData==Keys.Escape&&gallery.Expanded){gallery.Collapse();return true;}
         return base.ProcessCmdKey(ref msg,keyData);
     }
     void ApplyNative(bool desired,double opacity,bool force=false)

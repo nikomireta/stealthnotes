@@ -7,7 +7,7 @@ internal sealed class Tray : IDisposable
     readonly ContextMenuStrip menu=new();
     readonly ToolStripMenuItem ghost;
     DateTimeOffset lastWarning=DateTimeOffset.MinValue;
-    public Tray(Action newNote,Action list,Action show,Action hide,Action toggleGhost,Action settings,Action quit)
+    public Tray(Action newNote,Action list,Action activate,Action show,Action hide,Action toggleGhost,Action settings,Action quit)
     {
         ownedIcon=Icon.ExtractAssociatedIcon(Application.ExecutablePath)??(Icon)SystemIcons.Application.Clone();
         menu.Items.Add("New note",null,(_,_)=>newNote());
@@ -18,7 +18,7 @@ internal sealed class Tray : IDisposable
         menu.Items.Add(new ToolStripSeparator());menu.Items.Add("Hotkey settings…",null,(_,_)=>settings());
         menu.Items.Add(new ToolStripSeparator());menu.Items.Add("Quit",null,(_,_)=>quit());
         icon=new NotifyIcon {Icon=ownedIcon,Text="StealthNotes",Visible=true,ContextMenuStrip=menu};
-        icon.DoubleClick+=(_,_)=>list();
+        icon.DoubleClick+=(_,_)=>activate();
     }
     public void Render(Snapshot state){ghost.Checked=state.GlobalGhost;icon.Text=state.GlobalGhost?"StealthNotes · global ghost":"StealthNotes";}
     public void Warning(string text)

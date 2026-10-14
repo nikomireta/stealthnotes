@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- Theme-colored note preview cards with a first image, up to five text lines, search, keyboard access, and context-menu actions. Selection and scroll anchors survive updates; ghost previews remain redacted.
+- Startup, second launch, and tray double-click activate notes directly. Notes list is created only by its explicit menu/keyboard command.
+- Images stack above rich text in one scrolling document, with per-image context-menu removal and no carousel controls.
+- Background display previews capped at two megapixels, a shared 32 MiB cache, and cancellation of obsolete viewport requests.
+- Existing originals, RTF, autosave, import limits, schema v2, process checks, and ghost/capture behavior retained. No new runtime dependencies.
+
+Agent validation: Release compilation and static review only; no application, installer, capture, benchmark, or live-database tests were run by the agent. Separately, the user reports ghost notes were not visible in OBS, Recordly, screenshots, Google Meet, Zoom, and Teams. Exact build/source-mode coverage is unspecified; see [verification](VERIFICATION.md#user-reported-manual-capture-checks).
+
 ## 1.2.0
 
 - Native rich text with bold, italic, underline, strikethrough, bullets, and text/formatting undo/redo.

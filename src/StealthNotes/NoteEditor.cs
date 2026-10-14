@@ -9,6 +9,11 @@ internal sealed class NoteEditor : RichTextBox
     readonly Font ownedFont=new("Segoe UI",12,FontStyle.Regular,GraphicsUnit.Point);
     readonly ContextMenuStrip editingMenu=new();
     bool suppress;
+    int documentHeight=48;
+    public int DocumentHeight=>documentHeight;
+    public event Action? ContentHeightChanged,CaretMoved;
+    public event Action<int>? ScrollRequested;
+    public event Action<int,bool>? PageRequested;
     Color ink=Color.Black;
     public event Action? DocumentChanged;
     public event Action? NewRequested,ListRequested;
@@ -20,6 +25,7 @@ internal sealed class NoteEditor : RichTextBox
         Multiline=true;BorderStyle=BorderStyle.None;ScrollBars=RichTextBoxScrollBars.None;
         WordWrap=true;AcceptsTab=true;HideSelection=false;DetectUrls=false;EnableAutoDragDrop=false;
         Font=ownedFont;AccessibleName="Note text";
+        ContentsResized+=(_,e)=>{int height=Math.Max(Font.Height+8,e.NewRectangle.Height+8);if(documentHeight!=height){documentHeight=height;ContentHeightChanged?.Invoke();}};
         editingMenu.Items.Add("Undo",null,(_,_)=>UndoEdit());editingMenu.Items.Add("Redo",null,(_,_)=>RedoEdit());
         editingMenu.Items.Add(new ToolStripSeparator());
         editingMenu.Items.Add("Cut",null,(_,_)=>CopyInternal(true));editingMenu.Items.Add("Copy",null,(_,_)=>CopyInternal(false));
@@ -34,7 +40,7 @@ internal sealed class NoteEditor : RichTextBox
             catch(ArgumentException e){LocalLog.Error("Invalid stored RTF; plain text displayed",e);Text=text;}
             ClearUndo();ApplyInk(ink);
         }finally{suppress=false;}
-        FormattingChanged?.Invoke();
+        FormattingChanged?.Invoke();RequestMeasure();
     }
     public void SetPaper(Color paper,Color foreground)
     {
@@ -67,9 +73,26 @@ internal sealed class NoteEditor : RichTextBox
     public void UndoEdit(){if(CanUndo){Undo();ApplyInk(ink);Publish();FormattingChanged?.Invoke();}}
     public void RedoEdit(){if(CanRedo){Redo();ApplyInk(ink);Publish();FormattingChanged?.Invoke();}}
     void Publish(){if(!suppress)DocumentChanged?.Invoke();}
-    protected override void OnTextChanged(EventArgs e){base.OnTextChanged(e);Publish();}
-    protected override void OnSelectionChanged(EventArgs e){base.OnSelectionChanged(e);if(!suppress)FormattingChanged?.Invoke();}
-    protected override void OnHandleCreated(EventArgs e){base.OnHandleCreated(e);ApplyInk(ink);}
+    protected override void OnTextChanged(EventArgs e){base.OnTextChanged(e);Publish();RequestMeasure();if(!suppress)CaretMoved?.Invoke();}
+    protected override void OnSelectionChanged(EventArgs e){base.OnSelectionChanged(e);if(!suppress){FormattingChanged?.Invoke();CaretMoved?.Invoke();}}
+    protected override void OnHandleCreated(EventArgs e){base.OnHandleCreated(e);ApplyInk(ink);RequestMeasure();}
+    void RequestMeasure(){if(IsHandleCreated)Native.SendMessageW(Handle,0x441,0,0);} // EM_REQUESTRESIZE
+    protected override void OnResize(EventArgs e){base.OnResize(e);RequestMeasure();}
+    public Point CaretPosition()=>Focused&&GetCaretPos(out var point)?point:GetPositionFromCharIndex(SelectionStart);
+    public int CaretHeight(){using var font=SelectionFont;return Math.Max(Font.Height,font?.Height??0);}
+    public void MovePage(int direction,int distance,bool extend)
+    {
+        var point=CaretPosition();int head=GetCharIndexFromPosition(point);
+        int target=GetCharIndexFromPosition(new(point.X,Math.Max(0,point.Y+direction*distance)));
+        if(!extend)Select(target,0);
+        else {
+            int anchor=head<=SelectionStart?SelectionStart+SelectionLength:SelectionStart;
+            // EM_SETSEL supports a backwards selection, retaining the active end.
+            Native.SendMessageW(Handle,0xb1,anchor,target);
+        }
+        CaretMoved?.Invoke();
+    }
+    [DllImport("user32.dll")]static extern bool GetCaretPos(out Point point);
     void CopyInternal(bool cut)
     {
         if(SelectionLength==0)return;
@@ -99,6 +122,9 @@ internal sealed class NoteEditor : RichTextBox
     }
     protected override bool ProcessCmdKey(ref Message msg,Keys keyData)
     {
+        if(keyData is Keys.PageUp or Keys.PageDown or (Keys.Shift|Keys.PageUp) or (Keys.Shift|Keys.PageDown)){
+            PageRequested?.Invoke((keyData&Keys.KeyCode)==Keys.PageDown?1:-1,(keyData&Keys.Shift)!=0);return true;
+        }
         switch(keyData){
             case Keys.Control|Keys.B:ToggleStyle(1);return true;
             case Keys.Control|Keys.I:ToggleStyle(2);return true;
@@ -120,6 +146,7 @@ internal sealed class NoteEditor : RichTextBox
     }
     protected override void WndProc(ref Message m)
     {
+        if(m.Msg==0x20a&&ScrollRequested is not null){ScrollRequested.Invoke((short)(((long)m.WParam>>16)&0xffff));m.Result=0;return;}
         if(m.Msg==0x302){PasteSafe();m.Result=0;return;}
         if(m.Msg==0x301){CopyInternal(false);m.Result=0;return;}
         if(m.Msg==0x300){CopyInternal(true);m.Result=0;return;}
